@@ -2,8 +2,10 @@
 
 ## Overview
 
-A desktop video editor built with **Tauri + Rust** backend and a web-based frontend.
+A desktop video editor built with **Tauri + Rust** backend and a **SolidJS + TypeScript** frontend.
 All video processing is handled by **ffmpeg**, invoked as a Tauri sidecar or system binary.
+
+Target platforms: **Linux, macOS, Windows**
 
 ---
 
@@ -22,9 +24,9 @@ All video processing is handled by **ffmpeg**, invoked as a Tauri sidecar or sys
 ## Architecture
 
 ```
-Frontend (HTML/JS/CSS)
+SolidJS + TypeScript frontend
     │
-    │  Tauri IPC commands
+    │  Tauri IPC commands (strongly typed via @tauri-apps/api)
     ▼
 Rust backend (src-tauri/)
     │
@@ -40,6 +42,55 @@ ffmpeg binary
 
 ---
 
+## Tech Stack
+
+### Frontend
+| Concern | Choice |
+|---------|--------|
+| Framework | SolidJS |
+| Language | TypeScript (strict mode) |
+| Build tool | Vite |
+| Package manager | pnpm |
+| Linting | ESLint (with TS + SolidJS plugins) |
+| Formatting | Prettier |
+| Type checking | `tsc --noEmit` |
+| Styling | Tailwind v4 (Vite-native, no config file) |
+| UI components | Kobalte (headless, accessible primitives) |
+
+### Backend
+| Concern | Choice |
+|---------|--------|
+| Language | Rust |
+| Linting | `cargo clippy -- -D warnings` |
+| Formatting | `cargo fmt --check` |
+
+### Tooling
+| Concern | Choice |
+|---------|--------|
+| Frontend pre-commit hooks | Husky + lint-staged |
+| Backend pre-commit hooks | cargo-husky |
+| Pre-commit checks (frontend) | ESLint, Prettier, `tsc --noEmit` |
+| Pre-commit checks (backend) | `cargo clippy`, `cargo fmt` |
+
+---
+
+## Pre-commit Hook Flow
+
+```
+git commit
+    │
+    ├─ Husky (frontend staged files)
+    │   ├─ ESLint --fix
+    │   ├─ Prettier --write
+    │   └─ tsc --noEmit
+    │
+    └─ cargo-husky (backend)
+        ├─ cargo fmt --check
+        └─ cargo clippy -- -D warnings
+```
+
+---
+
 ## ffmpeg Integration Strategy
 
 ### Phase 1 (development): system ffmpeg
@@ -48,7 +99,7 @@ ffmpeg binary
 - Abstracted behind a single `ffmpeg_path()` helper so the switch is trivial
 
 ### Phase 2 (release): bundled sidecar
-- Ship an LGPL-only ffmpeg build with the app (no GPL codecs needed — all ops use copy or uncompressed)
+- Ship an LGPL-only ffmpeg build (no GPL codecs needed — all ops use copy or uncompressed)
 - Per-platform binaries named with Tauri's target triple convention:
   ```
   src-tauri/binaries/
@@ -67,18 +118,28 @@ ffmpeg binary
 simple-video-editor/
 ├── plans/
 │   └── 01-initial-plan.md
-├── src/                  # Frontend
-│   ├── index.html
-│   ├── main.js
-│   └── style.css
+├── src/                        # Frontend
+│   ├── assets/
+│   ├── components/
+│   ├── App.tsx
+│   ├── main.tsx
+│   └── vite-env.d.ts
 ├── src-tauri/
-│   ├── binaries/         # ffmpeg sidecars (added before release)
+│   ├── binaries/               # ffmpeg sidecars (added before release)
 │   ├── src/
 │   │   ├── main.rs
 │   │   ├── lib.rs
-│   │   └── ffmpeg.rs     # All ffmpeg invocation logic
+│   │   └── ffmpeg.rs           # All ffmpeg invocation logic
 │   ├── Cargo.toml
 │   └── tauri.conf.json
+├── .husky/
+│   └── pre-commit
+├── .eslintrc.json
+├── .prettierrc
+├── tsconfig.json               # strict: true
+├── vite.config.ts
+├── package.json
+├── pnpm-lock.yaml
 └── README.md
 ```
 
@@ -86,20 +147,23 @@ simple-video-editor/
 
 ## Milestones
 
-- [ ] Scaffold Tauri project (`npm create tauri-app`)
+- [ ] Decide SolidJS ecosystem libraries (styling, UI components)
+- [ ] Scaffold Tauri + SolidJS + TypeScript project with pnpm
+- [ ] Configure ESLint (strict TS + SolidJS rules), Prettier, tsconfig strict
+- [ ] Set up Husky + lint-staged (lint, format, typecheck on commit)
+- [ ] Set up cargo-husky (clippy, fmt on commit)
 - [ ] Wire up `tauri-plugin-shell` and verify ffmpeg invocation
 - [ ] Implement trim command (op 1) end-to-end
 - [ ] Native file picker via `tauri-plugin-dialog`
 - [ ] Implement remaining operations (2–5)
-- [ ] Basic playback preview in frontend (`<video>` element)
+- [ ] Basic playback preview (`<video>` element)
 - [ ] Progress reporting from ffmpeg stderr to frontend
 - [ ] Replace system ffmpeg with bundled LGPL sidecar
-- [ ] Build and test on all target platforms
+- [ ] CI: build matrix for Linux, macOS, Windows
 
 ---
 
 ## Open Questions
 
-- [ ] Target platforms: Linux only, or also macOS / Windows?
-- [ ] Frontend framework or vanilla JS?
-- [ ] Do any operations need re-encoding? (Would require GPL ffmpeg build or alternative codec)
+- [ ] Routing — needed? (`@solidjs/router` if multi-view)
+- [ ] Do any operations need re-encoding? (Would require GPL ffmpeg build)

@@ -1,0 +1,23 @@
+#!/usr/bin/env sh
+
+# Frontend: lint + format staged files
+pnpm lint-staged
+
+# Frontend: full typecheck
+pnpm tsc --noEmit
+
+# Backend: format check (no compilation required)
+cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+
+# Backend: clippy
+# Requires Tauri system prerequisites on Linux (webkit2gtk etc.)
+# Skips gracefully if they are missing — fails hard if they are present and clippy errors exist.
+if ! cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings 2>&1; then
+  if pkg-config --exists gdk-3.0 2>/dev/null; then
+    echo "cargo clippy failed — fix the warnings above."
+    exit 1
+  else
+    echo "Warning: cargo clippy skipped (Tauri system prerequisites not installed)."
+    echo "See: https://tauri.app/start/prerequisites/"
+  fi
+fi
