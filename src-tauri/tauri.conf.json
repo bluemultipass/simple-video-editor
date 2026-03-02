@@ -33,5 +33,18 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "shell": {
+      "open": false,
+      "scope": [
+        {
+          "name": "ffmpeg",
+          "cmd": "ffmpeg",
+          "args": true,
+          "sidecar": false
+        }
+      ]
+    }
   }
 }
