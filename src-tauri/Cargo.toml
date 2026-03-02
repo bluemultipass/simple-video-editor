@@ -14,10 +14,6 @@ edition = "2021"
 name = "simple_video_editor_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
-[dev-dependencies]
-# Installs git hooks for the Rust workflow via .cargo-husky/hooks/
-cargo-husky = { version = "1", default-features = false, features = ["user-hooks"] }
-
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

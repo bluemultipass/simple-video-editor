@@ -67,26 +67,31 @@ ffmpeg binary
 ### Tooling
 | Concern | Choice |
 |---------|--------|
-| Frontend pre-commit hooks | Husky + lint-staged |
-| Backend pre-commit hooks | cargo-husky |
-| Pre-commit checks (frontend) | ESLint, Prettier, `tsc --noEmit` |
-| Pre-commit checks (backend) | `cargo clippy`, `cargo fmt` |
+| Git hooks | Husky (all hooks — frontend and backend) |
+| Staged-file runner | lint-staged |
+| Pre-commit checks (frontend) | ESLint --fix, Prettier --write, `tsc --noEmit` |
+| Pre-commit checks (backend) | `cargo fmt --check`, `cargo clippy -D warnings` |
+| Pre-push checks | `cargo test` |
 
 ---
 
-## Pre-commit Hook Flow
+## Git Hook Flow
 
 ```
 git commit
     │
-    ├─ Husky (frontend staged files)
-    │   ├─ ESLint --fix
-    │   ├─ Prettier --write
-    │   └─ tsc --noEmit
-    │
-    └─ cargo-husky (backend)
+    └─ Husky .husky/pre-commit
+        ├─ lint-staged
+        │   ├─ ESLint --fix      (*.ts, *.tsx)
+        │   └─ Prettier --write  (*.ts, *.tsx, *.css)
+        ├─ tsc --noEmit
         ├─ cargo fmt --check
         └─ cargo clippy -- -D warnings
+
+git push
+    │
+    └─ Husky .husky/pre-push
+        └─ cargo test
 ```
 
 ---
@@ -133,7 +138,8 @@ simple-video-editor/
 │   ├── Cargo.toml
 │   └── tauri.conf.json
 ├── .husky/
-│   └── pre-commit
+│   ├── pre-commit
+│   └── pre-push
 ├── .eslintrc.json
 ├── .prettierrc
 ├── tsconfig.json               # strict: true
@@ -147,11 +153,10 @@ simple-video-editor/
 
 ## Milestones
 
-- [ ] Decide SolidJS ecosystem libraries (styling, UI components)
-- [ ] Scaffold Tauri + SolidJS + TypeScript project with pnpm
-- [ ] Configure ESLint (strict TS + SolidJS rules), Prettier, tsconfig strict
-- [ ] Set up Husky + lint-staged (lint, format, typecheck on commit)
-- [ ] Set up cargo-husky (clippy, fmt on commit)
+- [x] Decide SolidJS ecosystem libraries (Tailwind v4, Kobalte)
+- [x] Scaffold Tauri + SolidJS + TypeScript project with pnpm
+- [x] Configure ESLint (strict TS + SolidJS rules), Prettier, tsconfig strict
+- [x] Set up Husky + lint-staged (lint, format, typecheck, clippy, fmt on commit)
 - [ ] Wire up `tauri-plugin-shell` and verify ffmpeg invocation
 - [ ] Implement trim command (op 1) end-to-end
 - [ ] Native file picker via `tauri-plugin-dialog`

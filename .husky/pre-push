@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+
+# Backend: run full test suite before pushing
+cargo test --manifest-path src-tauri/Cargo.toml
