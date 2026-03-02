@@ -127,7 +127,7 @@ simple-video-editor/
 │   ├── assets/
 │   ├── components/
 │   ├── App.tsx
-│   ├── main.tsx
+│   ├── index.tsx
 │   └── vite-env.d.ts
 ├── src-tauri/
 │   ├── binaries/               # ffmpeg sidecars (added before release)
@@ -140,7 +140,7 @@ simple-video-editor/
 ├── .husky/
 │   ├── pre-commit
 │   └── pre-push
-├── .eslintrc.json
+├── eslint.config.js
 ├── .prettierrc
 ├── tsconfig.json               # strict: true
 ├── vite.config.ts
@@ -164,11 +164,11 @@ simple-video-editor/
 - [ ] Basic playback preview (`<video>` element)
 - [ ] Progress reporting from ffmpeg stderr to frontend
 - [ ] Replace system ffmpeg with bundled LGPL sidecar
-- [ ] CI: build matrix for Linux, macOS, Windows
+- [x] CI: checks matrix for Linux, macOS, Windows (GitHub Actions)
 
 ---
 
 ## Open Questions
 
-- [ ] Routing — needed? (`@solidjs/router` if multi-view)
-- [ ] Do any operations need re-encoding? (Would require GPL ffmpeg build)
+- [x] Routing — not needed; single-workspace app, SolidJS `<Show>`/`<Switch>` sufficient
+- [x] Re-encoding — not needed for current five operations; all use `-c copy` or uncompressed PCM

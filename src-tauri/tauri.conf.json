@@ -12,9 +12,11 @@
   "app": {
     "windows": [
       {
-        "title": "simple-video-editor",
-        "width": 800,
-        "height": 600
+        "title": "Simple Video Editor",
+        "width": 1280,
+        "height": 720,
+        "minWidth": 960,
+        "minHeight": 540
       }
     ],
     "security": {
