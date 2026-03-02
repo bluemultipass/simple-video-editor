@@ -10,7 +10,8 @@
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
-    "isolatedModules": true,
+    "isolatedModules": true,           // kept for Vite compat; verbatimModuleSyntax implies it
+    "verbatimModuleSyntax": true,      // enforces `import type` for type-only imports
     "noEmit": true,
     "jsx": "preserve",
     "jsxImportSource": "solid-js",
@@ -22,7 +23,8 @@
     "noFallthroughCasesInSwitch": true,
     "noImplicitReturns": true,
     "exactOptionalPropertyTypes": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "noUncheckedIndexedAccess": true   // arr[0] is T | undefined, not T
   },
   "include": ["src"],
   "references": [{ "path": "./tsconfig.node.json" }]
