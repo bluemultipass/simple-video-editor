@@ -1,0 +1,14 @@
+#!/usr/bin/env sh
+
+# Backend: run full test suite before pushing
+# Requires Tauri system prerequisites on Linux (webkit2gtk etc.)
+# Skips gracefully if they are missing — fails hard if present and tests fail.
+if ! cargo test --manifest-path src-tauri/Cargo.toml 2>&1; then
+  if pkg-config --exists gdk-3.0 2>/dev/null; then
+    echo "cargo test failed — fix failing tests above."
+    exit 1
+  else
+    echo "Warning: cargo test skipped (Tauri system prerequisites not installed)."
+    echo "See: https://tauri.app/start/prerequisites/"
+  fi
+fi
