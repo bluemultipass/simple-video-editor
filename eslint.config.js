@@ -19,6 +19,13 @@ export default tseslint.config(
     },
     rules: {
       ...solidPlugin.configs.typescript.rules,
+      // Allow _-prefixed args to be unused (common convention for unused params)
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
+      // Warn on console.log but allow console.warn/error for legitimate use
+      "no-console": ["warn", { allow: ["warn", "error"] }],
     },
   },
 );
