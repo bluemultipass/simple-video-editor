@@ -15,7 +15,18 @@ A lightweight desktop video editor built with [Tauri](https://tauri.app) (Rust b
 - [Rust](https://rustup.rs)
 - [Node.js](https://nodejs.org) 22+
 - [pnpm](https://pnpm.io) 10+
-- [Tauri system dependencies](https://tauri.app/start/prerequisites/) for your OS
+- Tauri system dependencies for your OS:
+  - **Linux (Debian/Ubuntu)**
+    ```sh
+    sudo apt-get update
+    sudo apt-get install -y \
+      libwebkit2gtk-4.1-dev \
+      build-essential \
+      libssl-dev \
+      libayatana-appindicator3-dev \
+      librsvg2-dev
+    ```
+  - **macOS/Windows** — see [Tauri prerequisites](https://tauri.app/start/prerequisites/)
 - `ffmpeg` on your `PATH` (development — bundled binary planned for release)
 
 ## Development
