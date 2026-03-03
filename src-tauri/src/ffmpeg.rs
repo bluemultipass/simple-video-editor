@@ -21,29 +21,54 @@ impl From<std::io::Error> for FfmpegError {
 }
 
 pub async fn run_ffmpeg(app: &tauri::AppHandle, args: Vec<String>) -> Result<(), FfmpegError> {
-    let (mut rx, _child) = app
+    eprintln!("[run_ffmpeg] spawning: ffmpeg {}", args.join(" "));
+
+    let spawn_result = app
         .shell()
         .command("ffmpeg")
         .args(args)
-        .spawn()
-        .map_err(|e| FfmpegError::Io(e.to_string()))?;
+        .spawn();
+
+    let (mut rx, _child) = match spawn_result {
+        Ok(v) => {
+            eprintln!("[run_ffmpeg] spawn OK");
+            v
+        }
+        Err(e) => {
+            eprintln!("[run_ffmpeg] spawn FAILED: {e}");
+            return Err(FfmpegError::Io(e.to_string()));
+        }
+    };
 
     let mut stderr_buf = String::new();
     let mut exit_code: i32 = -1;
 
+    eprintln!("[run_ffmpeg] entering event loop");
     while let Some(event) = rx.recv().await {
         match event {
             CommandEvent::Stderr(line) => {
-                stderr_buf.push_str(&String::from_utf8_lossy(&line));
+                let s = String::from_utf8_lossy(&line);
+                eprintln!("[run_ffmpeg] stderr: {s}");
+                stderr_buf.push_str(&s);
                 stderr_buf.push('\n');
+            }
+            CommandEvent::Stdout(line) => {
+                eprintln!("[run_ffmpeg] stdout: {}", String::from_utf8_lossy(&line));
             }
             CommandEvent::Terminated(payload) => {
                 exit_code = payload.code.unwrap_or(-1);
+                eprintln!("[run_ffmpeg] terminated, exit_code={exit_code}");
                 break;
             }
-            _ => {}
+            CommandEvent::Error(e) => {
+                eprintln!("[run_ffmpeg] error event: {e}");
+            }
+            _ => {
+                eprintln!("[run_ffmpeg] other event");
+            }
         }
     }
+    eprintln!("[run_ffmpeg] loop exited, exit_code={exit_code}");
 
     if exit_code != 0 {
         return Err(FfmpegError::ProcessFailed {
