@@ -6,6 +6,7 @@ pub enum FfmpegError {
     #[error("ffmpeg process failed (exit {code}): {stderr}")]
     ProcessFailed { code: i32, stderr: String },
 
+    #[allow(dead_code)]
     #[error("ffmpeg not found on PATH")]
     NotFound,
 
