@@ -39,6 +39,7 @@ pub async fn run_ffmpeg(app: &tauri::AppHandle, args: Vec<String>) -> Result<(),
             }
             CommandEvent::Terminated(payload) => {
                 exit_code = payload.code.unwrap_or(-1);
+                break;
             }
             _ => {}
         }

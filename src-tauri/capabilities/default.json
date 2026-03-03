@@ -6,7 +6,12 @@
   "permissions": [
     "core:default",
     "opener:default",
-    "shell:allow-execute",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        { "name": "ffmpeg", "cmd": "ffmpeg", "args": true, "sidecar": false }
+      ]
+    },
     "shell:allow-kill",
     "dialog:allow-open",
     "dialog:allow-save",
