@@ -71,7 +71,6 @@ function App() {
       })
       setStatus({ kind: "ok", message: `Trimmed → ${out}` })
     } catch (err: unknown) {
-      console.error("[handleTrim] raw error:", err, typeof err)
       setStatus({ kind: "error", message: formatFfmpegError(err) })
     }
   }

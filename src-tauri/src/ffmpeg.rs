@@ -23,8 +23,6 @@ impl From<std::io::Error> for FfmpegError {
 pub async fn run_ffmpeg(app: &tauri::AppHandle, args: Vec<String>, overwrite: bool) -> Result<(), FfmpegError> {
     let mut full_args = vec![if overwrite { "-y" } else { "-n" }.into()];
     full_args.extend(args);
-    println!("[run_ffmpeg] spawning: ffmpeg {}", full_args.join(" "));
-    eprintln!("[run_ffmpeg] spawning: ffmpeg {}", full_args.join(" "));
 
     let spawn_result = app
         .shell()
@@ -33,45 +31,27 @@ pub async fn run_ffmpeg(app: &tauri::AppHandle, args: Vec<String>, overwrite: bo
         .spawn();
 
     let (mut rx, _child) = match spawn_result {
-        Ok(v) => {
-            eprintln!("[run_ffmpeg] spawn OK");
-            v
-        }
-        Err(e) => {
-            eprintln!("[run_ffmpeg] spawn FAILED: {e}");
-            return Err(FfmpegError::Io(e.to_string()));
-        }
+        Ok(v) => v,
+        Err(e) => return Err(FfmpegError::Io(e.to_string())),
     };
 
     let mut stderr_buf = String::new();
     let mut exit_code: i32 = -1;
 
-    eprintln!("[run_ffmpeg] entering event loop");
     while let Some(event) = rx.recv().await {
         match event {
             CommandEvent::Stderr(line) => {
                 let s = String::from_utf8_lossy(&line);
-                eprintln!("[run_ffmpeg] stderr: {s}");
                 stderr_buf.push_str(&s);
                 stderr_buf.push('\n');
             }
-            CommandEvent::Stdout(line) => {
-                eprintln!("[run_ffmpeg] stdout: {}", String::from_utf8_lossy(&line));
-            }
             CommandEvent::Terminated(payload) => {
                 exit_code = payload.code.unwrap_or(-1);
-                eprintln!("[run_ffmpeg] terminated, exit_code={exit_code}");
                 break;
             }
-            CommandEvent::Error(e) => {
-                eprintln!("[run_ffmpeg] error event: {e}");
-            }
-            _ => {
-                eprintln!("[run_ffmpeg] other event");
-            }
+            _ => {}
         }
     }
-    eprintln!("[run_ffmpeg] loop exited, exit_code={exit_code}");
 
     if exit_code != 0 {
         return Err(FfmpegError::ProcessFailed {
@@ -88,7 +68,6 @@ pub async fn run_ffmpeg(app: &tauri::AppHandle, args: Vec<String>, overwrite: bo
 /// `-ss`/`-to` placed BEFORE `-i` for fast input-seeking (keyframe-accurate seek).
 pub fn trim_args(input: &str, output: &str, start_secs: f64, end_secs: f64) -> Vec<String> {
     vec![
-
         "-ss".into(),
         format!("{start_secs:.6}"),
         "-to".into(),
@@ -103,7 +82,6 @@ pub fn trim_args(input: &str, output: &str, start_secs: f64, end_secs: f64) -> V
 
 pub fn extract_frame_args(input: &str, output: &str, at_secs: f64) -> Vec<String> {
     vec![
-
         "-ss".into(),
         format!("{at_secs:.6}"),
         "-i".into(),
@@ -116,7 +94,6 @@ pub fn extract_frame_args(input: &str, output: &str, at_secs: f64) -> Vec<String
 
 pub fn remux_args(input: &str, output: &str) -> Vec<String> {
     vec![
-
         "-i".into(),
         input.to_owned(),
         "-c".into(),
@@ -128,7 +105,6 @@ pub fn remux_args(input: &str, output: &str) -> Vec<String> {
 /// Strips all audio tracks. `-an` removes audio; video stream is copied losslessly.
 pub fn strip_audio_args(input: &str, output: &str) -> Vec<String> {
     vec![
-
         "-i".into(),
         input.to_owned(),
         "-c:v".into(),
@@ -142,7 +118,6 @@ pub fn strip_audio_args(input: &str, output: &str) -> Vec<String> {
 /// `-safe 0` is required when paths are absolute.
 pub fn merge_args(list_file: &str, output: &str) -> Vec<String> {
     vec![
-
         "-f".into(),
         "concat".into(),
         "-safe".into(),
