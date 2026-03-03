@@ -53,13 +53,21 @@ pub async fn run_ffmpeg(app: &tauri::AppHandle, args: Vec<String>, overwrite: bo
         }
     }
 
-    println!("[run_ffmpeg] exit_code={exit_code} stderr_len={}", stderr_buf.len());
     if exit_code != 0 {
         return Err(FfmpegError::ProcessFailed {
             code: exit_code,
             stderr: stderr_buf,
         });
     }
+
+    // ffmpeg -n exits 0 even when it refuses to overwrite, so check stderr
+    if !overwrite && stderr_buf.contains("already exists. Not overwriting") {
+        return Err(FfmpegError::ProcessFailed {
+            code: 1,
+            stderr: "Output file already exists. Check \"Allow overwrite\" to replace it.".into(),
+        });
+    }
+
     Ok(())
 }
 
