@@ -49,7 +49,7 @@ thread management.
 | Issue | Root Cause | Resolution |
 |---|---|---|
 | `invoke()` keys must be **camelCase** | Tauri v2 `#[tauri::command]` auto-converts Rust `snake_case` params to `camelCase` on the JS side | Use `inputPath` not `input_path` in all `invoke()` calls |
-| `formatFfmpegError` crashed with `"err is not an Object"` | Tauri v2 sends command errors as strings (via `Display` trait), not as serde-serialized objects | `formatFfmpegError` must handle both `string` and `object` error shapes |
+| `formatFfmpegError` crashed with `"err is not an Object"` | The `in` operator throws if its RHS isn't an object; untyped `catch` needs a guard | `formatFfmpegError` accepts `unknown` and checks `typeof` before using `in` operator |
 | Overwrite safety | Original plan used `-y` (always overwrite) | Added `overwrite: bool` param; `run_ffmpeg` prepends `-n` (default) or `-y` based on flag; UI has checkbox |
 | `Terminated` event needs `break` | Without `break`, the event loop hangs after ffmpeg exits | Added `break` in `CommandEvent::Terminated` arm |
 
@@ -555,9 +555,9 @@ export async function pickOutputFile(defaultName: string): Promise<string | null
 Replaces the default template with the simplest UI that exercises the full
 trim flow end-to-end, including an "Allow overwrite" checkbox.
 
-**Error handling note:** Tauri v2 sends command errors as strings (via the
-`Display` trait), not as serde-serialized objects. `formatFfmpegError` must
-handle both shapes — check `typeof err === "string"` first.
+**Error handling note:** Tauri v2 sends command errors as serde-serialized
+objects (e.g. `{ProcessFailed: {code: 254, stderr: "..."}}`).
+`formatFfmpegError` accepts `unknown` and type-guards before using `in`.
 
 ```tsx
 import { createSignal } from "solid-js"
@@ -685,7 +685,7 @@ Run `pnpm tauri dev` after all changes.
 **Check 4 — Error serialises to frontend**:
 In DevTools console:
 ```javascript
-window.__TAURI__.core.invoke("trim_video", {
+__TAURI_INTERNALS__.invoke("trim_video", {
   inputPath: "/nonexistent.mp4",
   outputPath: "/tmp/out.mp4",
   startSecs: 0,
@@ -693,8 +693,9 @@ window.__TAURI__.core.invoke("trim_video", {
   overwrite: false,
 })
 ```
-Expected rejection: a string like `"ffmpeg process failed (exit 1): /nonexistent.mp4: No such file..."`.
-Note: Tauri v2 sends errors as Display strings, not serialized objects.
+Expected rejection: `{ ProcessFailed: { code: 254, stderr: "...No such file or directory..." } }`
+Note: `window.__TAURI__` is not available in Tauri v2 dev mode; use
+`__TAURI_INTERNALS__.invoke` instead.
 
 ---
 
@@ -704,7 +705,7 @@ Note: Tauri v2 sends errors as Display strings, not serialized objects.
 |---|---|---|
 | IPC error / command not found | Command missing from `generate_handler![]` | Add to `lib.rs` |
 | `missing required key inputPath` | Using `snake_case` keys in JS `invoke()` | **Use `camelCase`** — Tauri v2 auto-converts Rust snake_case to camelCase |
-| `err is not an Object` in formatFfmpegError | Tauri v2 sends errors as strings (Display), not serialized objects | Check `typeof err === "string"` before using `in` operator |
+| `err is not an Object` in formatFfmpegError | `catch(err)` is `unknown`; using `in` on a non-object throws | Guard with `typeof err === "object" && err !== null` before using `in` |
 | Dialog opens, path is always `None` | `dialog:allow-open` missing | Add to capabilities |
 | ffmpeg spawn permission error | `shell:allow-execute` missing or scope wrong | Check capabilities + `tauri.conf.json` |
 | `app.shell()` method not found | `ShellExt` trait not imported | `use tauri_plugin_shell::ShellExt;` |
