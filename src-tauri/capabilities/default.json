@@ -5,6 +5,21 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "opener:default"
+    "opener:default",
+    {
+      "identifier": "shell:allow-execute",
+      "scope": {
+        "allow": [
+          { "name": "ffmpeg", "cmd": "ffmpeg", "args": true }
+        ]
+      }
+    },
+    "shell:allow-kill",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "fs:allow-read-file",
+    "fs:allow-write-file",
+    "fs:allow-read-dir",
+    "fs:allow-exists"
   ]
 }
