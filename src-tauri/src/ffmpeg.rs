@@ -53,6 +53,7 @@ pub async fn run_ffmpeg(app: &tauri::AppHandle, args: Vec<String>, overwrite: bo
         }
     }
 
+    println!("[run_ffmpeg] exit_code={exit_code} stderr_len={}", stderr_buf.len());
     if exit_code != 0 {
         return Err(FfmpegError::ProcessFailed {
             code: exit_code,
