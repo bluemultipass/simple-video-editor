@@ -9,12 +9,17 @@ type Status =
   | { kind: "ok"; message: string }
   | { kind: "error"; message: string }
 
-function formatFfmpegError(err: FfmpegError): string {
-  if ("ProcessFailed" in err)
-    return `ffmpeg exited ${err.ProcessFailed.code.toString()}:\n${err.ProcessFailed.stderr}`
-  if ("NotFound" in err) return "ffmpeg not found on PATH."
-  if ("Io" in err) return `IO error: ${err.Io}`
-  return "Unknown error"
+function formatFfmpegError(err: unknown): string {
+  // Tauri v2 may send errors as strings (via Display) or as serialized objects
+  if (typeof err === "string") return err
+  if (err !== null && typeof err === "object") {
+    const obj = err as FfmpegError
+    if ("ProcessFailed" in obj)
+      return `ffmpeg exited ${obj.ProcessFailed.code.toString()}:\n${obj.ProcessFailed.stderr}`
+    if ("NotFound" in obj) return "ffmpeg not found on PATH."
+    if ("Io" in obj) return `IO error: ${obj.Io}`
+  }
+  return String(err)
 }
 
 function App() {
@@ -64,7 +69,8 @@ function App() {
       })
       setStatus({ kind: "ok", message: `Trimmed → ${out}` })
     } catch (err: unknown) {
-      setStatus({ kind: "error", message: formatFfmpegError(err as FfmpegError) })
+      console.error("[handleTrim] raw error:", err, typeof err)
+      setStatus({ kind: "error", message: formatFfmpegError(err) })
     }
   }
 
