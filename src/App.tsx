@@ -44,9 +44,7 @@ function App() {
 
   async function handlePickOutput() {
     const current = outputPath()
-    const defaultName = current
-      ? (current.split("/").at(-1) ?? "output.mp4")
-      : "output.mp4"
+    const defaultName = current ? (current.split("/").at(-1) ?? "output.mp4") : "output.mp4"
     const path = await pickOutputFile(defaultName)
     if (path !== null) setOutputPath(path)
   }
@@ -80,24 +78,48 @@ function App() {
   return (
     <main class="container">
       <h1>Simple Video Editor</h1>
-      <section style="display:flex;flex-direction:column;gap:12px;max-width:600px;margin:0 auto">
-        <div style="display:flex;gap:8px;align-items:center">
+      <section
+        style={{
+          display: "flex",
+          "flex-direction": "column",
+          gap: "12px",
+          "max-width": "600px",
+          margin: "0 auto",
+        }}
+      >
+        <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
           <button type="button" onClick={() => void handlePickInput()}>
             Open File
           </button>
-          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.875rem">
+          <span
+            style={{
+              flex: "1",
+              overflow: "hidden",
+              "text-overflow": "ellipsis",
+              "white-space": "nowrap",
+              "font-size": ".875rem",
+            }}
+          >
             {inputPath() ?? "No file selected"}
           </span>
         </div>
-        <div style="display:flex;gap:8px;align-items:center">
+        <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
           <button type="button" onClick={() => void handlePickOutput()}>
             Save As
           </button>
-          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.875rem">
+          <span
+            style={{
+              flex: "1",
+              overflow: "hidden",
+              "text-overflow": "ellipsis",
+              "white-space": "nowrap",
+              "font-size": ".875rem",
+            }}
+          >
             {outputPath() ?? "No output path set"}
           </span>
         </div>
-        <div style="display:flex;gap:16px;align-items:center">
+        <div style={{ display: "flex", gap: "16px", "align-items": "center" }}>
           <label>
             Start (s)
             <input
@@ -106,7 +128,7 @@ function App() {
               step="0.1"
               value={startSecs()}
               onInput={(e) => setStartSecs(parseFloat(e.currentTarget.value))}
-              style="width:80px;margin-left:8px"
+              style={{ width: "80px", "margin-left": "8px" }}
             />
           </label>
           <label>
@@ -117,11 +139,11 @@ function App() {
               step="0.1"
               value={endSecs()}
               onInput={(e) => setEndSecs(parseFloat(e.currentTarget.value))}
-              style="width:80px;margin-left:8px"
+              style={{ width: "80px", "margin-left": "8px" }}
             />
           </label>
         </div>
-        <label style="display:flex;align-items:center;gap:8px">
+        <label style={{ display: "flex", "align-items": "center", gap: "8px" }}>
           <input
             type="checkbox"
             checked={overwrite()}
@@ -138,13 +160,12 @@ function App() {
         </button>
         {status().kind !== "idle" && (
           <p
-            style={`white-space:pre-wrap;font-size:.875rem;color:${
-              status().kind === "error"
-                ? "#c0392b"
-                : status().kind === "ok"
-                  ? "#27ae60"
-                  : "#555"
-            }`}
+            style={{
+              "white-space": "pre-wrap",
+              "font-size": ".875rem",
+              color:
+                status().kind === "error" ? "#c0392b" : status().kind === "ok" ? "#27ae60" : "#555",
+            }}
           >
             {status().kind === "running"
               ? "Running…"

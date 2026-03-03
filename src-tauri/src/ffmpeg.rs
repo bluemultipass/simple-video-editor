@@ -23,7 +23,11 @@ impl From<std::io::Error> for FfmpegError {
     }
 }
 
-pub async fn run_ffmpeg(app: &tauri::AppHandle, args: Vec<String>, overwrite: bool) -> Result<(), FfmpegError> {
+pub async fn run_ffmpeg(
+    app: &tauri::AppHandle,
+    args: Vec<String>,
+    overwrite: bool,
+) -> Result<(), FfmpegError> {
     // Check for existing output file before spawning ffmpeg.
     // The output path is always the last argument.
     if !overwrite {
@@ -39,11 +43,7 @@ pub async fn run_ffmpeg(app: &tauri::AppHandle, args: Vec<String>, overwrite: bo
     let mut full_args = vec!["-y".into()];
     full_args.extend(args);
 
-    let spawn_result = app
-        .shell()
-        .command("ffmpeg")
-        .args(full_args)
-        .spawn();
+    let spawn_result = app.shell().command("ffmpeg").args(full_args).spawn();
 
     let (mut rx, _child) = match spawn_result {
         Ok(v) => v,

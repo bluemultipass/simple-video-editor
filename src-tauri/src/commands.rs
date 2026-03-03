@@ -42,7 +42,12 @@ pub async fn remux(
     output_path: String,
     overwrite: bool,
 ) -> Result<(), FfmpegError> {
-    ffmpeg::run_ffmpeg(&app, ffmpeg::remux_args(&input_path, &output_path), overwrite).await
+    ffmpeg::run_ffmpeg(
+        &app,
+        ffmpeg::remux_args(&input_path, &output_path),
+        overwrite,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -52,7 +57,12 @@ pub async fn strip_audio(
     output_path: String,
     overwrite: bool,
 ) -> Result<(), FfmpegError> {
-    ffmpeg::run_ffmpeg(&app, ffmpeg::strip_audio_args(&input_path, &output_path), overwrite).await
+    ffmpeg::run_ffmpeg(
+        &app,
+        ffmpeg::strip_audio_args(&input_path, &output_path),
+        overwrite,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -69,7 +79,8 @@ pub async fn merge_clips(
         .collect();
     std::fs::write(&list_path, list_content).map_err(|e| FfmpegError::Io(e.to_string()))?;
     let list_str = list_path.to_string_lossy().into_owned();
-    let result = ffmpeg::run_ffmpeg(&app, ffmpeg::merge_args(&list_str, &output_path), overwrite).await;
+    let result =
+        ffmpeg::run_ffmpeg(&app, ffmpeg::merge_args(&list_str, &output_path), overwrite).await;
     let _ = std::fs::remove_file(&list_path); // clean up regardless of success
     result
 }
