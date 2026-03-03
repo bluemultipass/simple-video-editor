@@ -8,9 +8,11 @@
     "opener:default",
     {
       "identifier": "shell:allow-execute",
-      "allow": [
-        { "name": "ffmpeg", "cmd": "ffmpeg", "args": true, "sidecar": false }
-      ]
+      "scope": {
+        "allow": [
+          { "name": "ffmpeg", "cmd": "ffmpeg", "args": true }
+        ]
+      }
     },
     "shell:allow-kill",
     "dialog:allow-open",
