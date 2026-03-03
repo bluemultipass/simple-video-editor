@@ -21,7 +21,20 @@ impl From<std::io::Error> for FfmpegError {
 }
 
 pub async fn run_ffmpeg(app: &tauri::AppHandle, args: Vec<String>, overwrite: bool) -> Result<(), FfmpegError> {
-    let mut full_args = vec![if overwrite { "-y" } else { "-n" }.into()];
+    // Check for existing output file before spawning ffmpeg.
+    // The output path is always the last argument.
+    if !overwrite {
+        if let Some(output) = args.last() {
+            if std::path::Path::new(output).exists() {
+                return Err(FfmpegError::ProcessFailed {
+                    code: 1,
+                    stderr: format!("Output file already exists: {output}\nCheck \"Allow overwrite\" to replace it."),
+                });
+            }
+        }
+    }
+
+    let mut full_args = vec!["-y".into()];
     full_args.extend(args);
 
     let spawn_result = app
@@ -57,14 +70,6 @@ pub async fn run_ffmpeg(app: &tauri::AppHandle, args: Vec<String>, overwrite: bo
         return Err(FfmpegError::ProcessFailed {
             code: exit_code,
             stderr: stderr_buf,
-        });
-    }
-
-    // ffmpeg -n exits 0 even when it refuses to overwrite, so check stderr
-    if !overwrite && stderr_buf.contains("already exists. Not overwriting") {
-        return Err(FfmpegError::ProcessFailed {
-            code: 1,
-            stderr: "Output file already exists. Check \"Allow overwrite\" to replace it.".into(),
         });
     }
 
