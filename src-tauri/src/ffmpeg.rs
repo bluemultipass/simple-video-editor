@@ -21,6 +21,7 @@ impl From<std::io::Error> for FfmpegError {
 }
 
 pub async fn run_ffmpeg(app: &tauri::AppHandle, args: Vec<String>) -> Result<(), FfmpegError> {
+    println!("[run_ffmpeg] spawning: ffmpeg {}", args.join(" "));
     eprintln!("[run_ffmpeg] spawning: ffmpeg {}", args.join(" "));
 
     let spawn_result = app

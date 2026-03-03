@@ -10,6 +10,7 @@ pub async fn trim_video(
     start_secs: f64,
     end_secs: f64,
 ) -> Result<(), FfmpegError> {
+    println!("[trim_video] called: input={input_path} output={output_path} start={start_secs} end={end_secs}");
     ffmpeg::run_ffmpeg(
         &app,
         ffmpeg::trim_args(&input_path, &output_path, start_secs, end_secs),
