@@ -12,16 +12,17 @@ By the end of this step, a single end-to-end trim operation should work.
 
 ```
 Frontend (TypeScript)
-  invoke("trim_video", { input_path, output_path, start_secs, end_secs })
+  invoke("trim_video", { inputPath, outputPath, startSecs, endSecs, overwrite })
       │
       │  Tauri IPC (serialised via serde_json)
+      │  NOTE: Tauri v2 auto-converts snake_case Rust params → camelCase JS keys
       ▼
 src-tauri/src/commands.rs
   #[tauri::command] trim_video(app: tauri::AppHandle, ...)
       │
       ▼
 src-tauri/src/ffmpeg.rs
-  run_ffmpeg(app: &tauri::AppHandle, args: Vec<String>) -> Result<(), FfmpegError>
+  run_ffmpeg(app: &tauri::AppHandle, args: Vec<String>, overwrite: bool) -> Result<(), FfmpegError>
       │
       ▼
 tauri-plugin-shell  →  ffmpeg binary (system PATH for now)
@@ -43,6 +44,17 @@ thread management.
 
 ---
 
+## Lessons Learned During Implementation
+
+| Issue | Root Cause | Resolution |
+|---|---|---|
+| `invoke()` keys must be **camelCase** | Tauri v2 `#[tauri::command]` auto-converts Rust `snake_case` params to `camelCase` on the JS side | Use `inputPath` not `input_path` in all `invoke()` calls |
+| `formatFfmpegError` crashed with `"err is not an Object"` | Tauri v2 sends command errors as strings (via `Display` trait), not as serde-serialized objects | `formatFfmpegError` must handle both `string` and `object` error shapes |
+| Overwrite safety | Original plan used `-y` (always overwrite) | Added `overwrite: bool` param; `run_ffmpeg` prepends `-n` (default) or `-y` based on flag; UI has checkbox |
+| `Terminated` event needs `break` | Without `break`, the event loop hangs after ffmpeg exits | Added `break` in `CommandEvent::Terminated` arm |
+
+---
+
 ## Open Questions — Resolved
 
 | Question | Decision |
@@ -50,21 +62,22 @@ thread management.
 | `run_ffmpeg` async or sync? | **async** — Tauri v2 native async command support, no thread management needed |
 | Temp file for merge concat list? | `std::env::temp_dir().join("sve_ffmpeg_concat.txt")`, write before spawn, delete after (regardless of success) |
 | Output path — dialog or auto? | **User dialog** via `tauri-plugin-dialog` `blocking_save_file()` |
+| Overwrite behavior? | **User-controlled** — checkbox defaults to off (`-n`), user can enable (`-y`) |
 
 ---
 
 ## Implementation Order
 
 ```
-Step 1 — Cargo.toml: add 4 new crates
-Step 2 — npm: install 3 plugin packages
-Step 3 — tauri.conf.json: add shell plugin scope
-Step 4 — capabilities/default.json: add shell/dialog/fs permissions
-Step 5 — src-tauri/src/ffmpeg.rs: new file (error type + run_ffmpeg + 5 arg builders + unit tests)
-Step 6 — src-tauri/src/commands.rs: new file (5 video commands + 2 file picker commands)
-Step 7 — src-tauri/src/lib.rs: full replacement (register plugins + all 7 commands)
-Step 8 — src/lib/ffmpeg.ts: new file (TS interfaces + 7 invoke wrappers)
-Step 9 — src/App.tsx: replace with minimal trim UI
+Step 1  — Cargo.toml: add 4 new crates
+Step 2  — npm: install 3 plugin packages
+Step 3  — tauri.conf.json: add shell plugin scope
+Step 4  — capabilities/default.json: add shell/dialog/fs permissions
+Step 5  — src-tauri/src/ffmpeg.rs: new file (error type + run_ffmpeg + 5 arg builders + unit tests)
+Step 6  — src-tauri/src/commands.rs: new file (5 video commands + 2 file picker commands)
+Step 7  — src-tauri/src/lib.rs: full replacement (register plugins + all 7 commands)
+Step 8  — src/lib/ffmpeg.ts: new file (TS interfaces + 7 invoke wrappers)
+Step 9  — src/App.tsx: replace with minimal trim UI (includes overwrite checkbox)
 Step 10 — Verify (4-step smoke test)
 ```
 
@@ -187,13 +200,14 @@ pub fn run() {
 ### `src-tauri/src/ffmpeg.rs` (new file)
 
 **Design notes:**
-- `run_ffmpeg` accepts `&tauri::AppHandle` — required by the `ShellExt` trait
+- `run_ffmpeg` accepts `&tauri::AppHandle` and `overwrite: bool` — prepends
+  `-y` or `-n` before the arg list
 - Arg builders return `Vec<String>` (not `Vec<&str>`) — numeric timestamps
-  must be formatted to owned `String`s first; lifetime juggling would make
-  the builders awkward
+  must be formatted to owned `String`s first
+- Arg builders do NOT include `-y`/`-n` — that's handled by `run_ffmpeg`
 - `FfmpegError::Io` wraps `String`, not `std::io::Error` — `std::io::Error`
-  is not `serde::Serialize`, so we use a manual `From` impl that converts
-  the error to its string representation
+  is not `serde::Serialize`, so we use a manual `From` impl
+- The `Terminated` event arm must `break` out of the loop
 
 ```rust
 use tauri_plugin_shell::process::CommandEvent;
@@ -204,6 +218,7 @@ pub enum FfmpegError {
     #[error("ffmpeg process failed (exit {code}): {stderr}")]
     ProcessFailed { code: i32, stderr: String },
 
+    #[allow(dead_code)]
     #[error("ffmpeg not found on PATH")]
     NotFound,
 
@@ -217,11 +232,14 @@ impl From<std::io::Error> for FfmpegError {
     }
 }
 
-pub async fn run_ffmpeg(app: &tauri::AppHandle, args: Vec<String>) -> Result<(), FfmpegError> {
+pub async fn run_ffmpeg(app: &tauri::AppHandle, args: Vec<String>, overwrite: bool) -> Result<(), FfmpegError> {
+    let mut full_args = vec![if overwrite { "-y" } else { "-n" }.into()];
+    full_args.extend(args);
+
     let (mut rx, _child) = app
         .shell()
         .command("ffmpeg")
-        .args(args)
+        .args(full_args)
         .spawn()
         .map_err(|e| FfmpegError::Io(e.to_string()))?;
 
@@ -231,11 +249,13 @@ pub async fn run_ffmpeg(app: &tauri::AppHandle, args: Vec<String>) -> Result<(),
     while let Some(event) = rx.recv().await {
         match event {
             CommandEvent::Stderr(line) => {
-                stderr_buf.push_str(&String::from_utf8_lossy(&line));
+                let s = String::from_utf8_lossy(&line);
+                stderr_buf.push_str(&s);
                 stderr_buf.push('\n');
             }
             CommandEvent::Terminated(payload) => {
                 exit_code = payload.code.unwrap_or(-1);
+                break;
             }
             _ => {}
         }
@@ -249,11 +269,12 @@ pub async fn run_ffmpeg(app: &tauri::AppHandle, args: Vec<String>) -> Result<(),
 
 // ── Arg builders ────────────────────────────────────────────────────────────
 // Pure functions, no I/O — unit-testable without a real ffmpeg binary.
+// NOTE: -y/-n is NOT included here — run_ffmpeg prepends it based on `overwrite`.
 
 /// `-ss`/`-to` placed BEFORE `-i` for fast input-seeking (keyframe-accurate seek).
 pub fn trim_args(input: &str, output: &str, start_secs: f64, end_secs: f64) -> Vec<String> {
     vec![
-        "-y".into(), "-ss".into(), format!("{start_secs:.6}"),
+        "-ss".into(), format!("{start_secs:.6}"),
         "-to".into(), format!("{end_secs:.6}"),
         "-i".into(), input.to_owned(), "-c".into(), "copy".into(), output.to_owned(),
     ]
@@ -261,32 +282,28 @@ pub fn trim_args(input: &str, output: &str, start_secs: f64, end_secs: f64) -> V
 
 pub fn extract_frame_args(input: &str, output: &str, at_secs: f64) -> Vec<String> {
     vec![
-        "-y".into(), "-ss".into(), format!("{at_secs:.6}"),
+        "-ss".into(), format!("{at_secs:.6}"),
         "-i".into(), input.to_owned(), "-vframes".into(), "1".into(), output.to_owned(),
     ]
 }
 
 pub fn remux_args(input: &str, output: &str) -> Vec<String> {
-    vec!["-y".into(), "-i".into(), input.to_owned(), "-c".into(), "copy".into(), output.to_owned()]
+    vec!["-i".into(), input.to_owned(), "-c".into(), "copy".into(), output.to_owned()]
 }
 
 /// Strips all audio tracks. `-an` removes audio; video stream is copied losslessly.
 pub fn strip_audio_args(input: &str, output: &str) -> Vec<String> {
     vec![
-        "-y".into(), "-i".into(), input.to_owned(),
+        "-i".into(), input.to_owned(),
         "-c:v".into(), "copy".into(), "-an".into(), output.to_owned(),
     ]
 }
 
-/// `list_file` must already exist and follow concat-demuxer format:
-/// ```
-/// file '/absolute/path/to/clip1.mp4'
-/// file '/absolute/path/to/clip2.mp4'
-/// ```
+/// `list_file` must already exist and follow concat-demuxer format.
 /// `-safe 0` is required when paths are absolute.
 pub fn merge_args(list_file: &str, output: &str) -> Vec<String> {
     vec![
-        "-y".into(), "-f".into(), "concat".into(), "-safe".into(), "0".into(),
+        "-f".into(), "concat".into(), "-safe".into(), "0".into(),
         "-i".into(), list_file.to_owned(), "-c".into(), "copy".into(), output.to_owned(),
     ]
 }
@@ -327,6 +344,8 @@ mod tests {
 
 ### `src-tauri/src/commands.rs` (new file)
 
+All commands accept `overwrite: bool` and pass it to `run_ffmpeg`.
+
 ```rust
 use tauri_plugin_dialog::DialogExt;
 use crate::ffmpeg::{self, FfmpegError};
@@ -338,8 +357,13 @@ pub async fn trim_video(
     output_path: String,
     start_secs: f64,
     end_secs: f64,
+    overwrite: bool,
 ) -> Result<(), FfmpegError> {
-    ffmpeg::run_ffmpeg(&app, ffmpeg::trim_args(&input_path, &output_path, start_secs, end_secs)).await
+    ffmpeg::run_ffmpeg(
+        &app,
+        ffmpeg::trim_args(&input_path, &output_path, start_secs, end_secs),
+        overwrite,
+    ).await
 }
 
 #[tauri::command]
@@ -348,8 +372,13 @@ pub async fn extract_frame(
     input_path: String,
     output_path: String,
     at_secs: f64,
+    overwrite: bool,
 ) -> Result<(), FfmpegError> {
-    ffmpeg::run_ffmpeg(&app, ffmpeg::extract_frame_args(&input_path, &output_path, at_secs)).await
+    ffmpeg::run_ffmpeg(
+        &app,
+        ffmpeg::extract_frame_args(&input_path, &output_path, at_secs),
+        overwrite,
+    ).await
 }
 
 #[tauri::command]
@@ -357,8 +386,9 @@ pub async fn remux(
     app: tauri::AppHandle,
     input_path: String,
     output_path: String,
+    overwrite: bool,
 ) -> Result<(), FfmpegError> {
-    ffmpeg::run_ffmpeg(&app, ffmpeg::remux_args(&input_path, &output_path)).await
+    ffmpeg::run_ffmpeg(&app, ffmpeg::remux_args(&input_path, &output_path), overwrite).await
 }
 
 #[tauri::command]
@@ -366,8 +396,9 @@ pub async fn strip_audio(
     app: tauri::AppHandle,
     input_path: String,
     output_path: String,
+    overwrite: bool,
 ) -> Result<(), FfmpegError> {
-    ffmpeg::run_ffmpeg(&app, ffmpeg::strip_audio_args(&input_path, &output_path)).await
+    ffmpeg::run_ffmpeg(&app, ffmpeg::strip_audio_args(&input_path, &output_path), overwrite).await
 }
 
 #[tauri::command]
@@ -375,6 +406,7 @@ pub async fn merge_clips(
     app: tauri::AppHandle,
     input_paths: Vec<String>,
     output_path: String,
+    overwrite: bool,
 ) -> Result<(), FfmpegError> {
     let list_path = std::env::temp_dir().join("sve_ffmpeg_concat.txt");
     let list_content: String = input_paths
@@ -383,7 +415,7 @@ pub async fn merge_clips(
         .collect();
     std::fs::write(&list_path, list_content).map_err(|e| FfmpegError::Io(e.to_string()))?;
     let list_str = list_path.to_string_lossy().into_owned();
-    let result = ffmpeg::run_ffmpeg(&app, ffmpeg::merge_args(&list_str, &output_path)).await;
+    let result = ffmpeg::run_ffmpeg(&app, ffmpeg::merge_args(&list_str, &output_path), overwrite).await;
     let _ = std::fs::remove_file(&list_path); // clean up regardless of success
     result
 }
@@ -418,8 +450,9 @@ pub async fn pick_output_file(
 
 ### `src/lib/ffmpeg.ts` (new file, new `src/lib/` directory)
 
-**Critical**: `invoke()` keys must be **`snake_case`** — they must match Rust
-parameter names exactly. Tauri v2 does not auto-rename camelCase.
+**Critical**: `invoke()` keys must be **`camelCase`** — Tauri v2's
+`#[tauri::command]` macro auto-converts Rust `snake_case` parameter names
+to `camelCase` on the JavaScript side.
 
 ```typescript
 import { invoke } from "@tauri-apps/api/core"
@@ -429,27 +462,32 @@ export interface TrimOptions {
   outputPath: string
   startSecs: number
   endSecs: number
+  overwrite: boolean
 }
 
 export interface ExtractFrameOptions {
   inputPath: string
   outputPath: string
   atSecs: number
+  overwrite: boolean
 }
 
 export interface RemuxOptions {
   inputPath: string
   outputPath: string
+  overwrite: boolean
 }
 
 export interface StripAudioOptions {
   inputPath: string
   outputPath: string
+  overwrite: boolean
 }
 
 export interface MergeOptions {
   inputPaths: string[]
   outputPath: string
+  overwrite: boolean
 }
 
 // Mirrors the FfmpegError Rust enum (serde serialises as tagged variants)
@@ -460,39 +498,44 @@ export type FfmpegError =
 
 export async function trimVideo(opts: TrimOptions): Promise<void> {
   return invoke("trim_video", {
-    input_path: opts.inputPath,
-    output_path: opts.outputPath,
-    start_secs: opts.startSecs,
-    end_secs: opts.endSecs,
+    inputPath: opts.inputPath,
+    outputPath: opts.outputPath,
+    startSecs: opts.startSecs,
+    endSecs: opts.endSecs,
+    overwrite: opts.overwrite,
   })
 }
 
 export async function extractFrame(opts: ExtractFrameOptions): Promise<void> {
   return invoke("extract_frame", {
-    input_path: opts.inputPath,
-    output_path: opts.outputPath,
-    at_secs: opts.atSecs,
+    inputPath: opts.inputPath,
+    outputPath: opts.outputPath,
+    atSecs: opts.atSecs,
+    overwrite: opts.overwrite,
   })
 }
 
 export async function remux(opts: RemuxOptions): Promise<void> {
   return invoke("remux", {
-    input_path: opts.inputPath,
-    output_path: opts.outputPath,
+    inputPath: opts.inputPath,
+    outputPath: opts.outputPath,
+    overwrite: opts.overwrite,
   })
 }
 
 export async function stripAudio(opts: StripAudioOptions): Promise<void> {
   return invoke("strip_audio", {
-    input_path: opts.inputPath,
-    output_path: opts.outputPath,
+    inputPath: opts.inputPath,
+    outputPath: opts.outputPath,
+    overwrite: opts.overwrite,
   })
 }
 
 export async function mergeClips(opts: MergeOptions): Promise<void> {
   return invoke("merge_clips", {
-    input_paths: opts.inputPaths,
-    output_path: opts.outputPath,
+    inputPaths: opts.inputPaths,
+    outputPath: opts.outputPath,
+    overwrite: opts.overwrite,
   })
 }
 
@@ -501,25 +544,25 @@ export async function pickInputFile(): Promise<string | null> {
 }
 
 export async function pickOutputFile(defaultName: string): Promise<string | null> {
-  return invoke<string | null>("pick_output_file", { default_name: defaultName })
+  return invoke<string | null>("pick_output_file", { defaultName })
 }
 ```
-
-Thin wrappers are worth having: they give you a single place to add logging,
-error transformation, or optimistic UI updates without scattering `invoke`
-calls through components.
 
 ---
 
 ## Minimal Trim UI — `src/App.tsx` (replacement)
 
 Replaces the default template with the simplest UI that exercises the full
-trim flow end-to-end:
+trim flow end-to-end, including an "Allow overwrite" checkbox.
+
+**Error handling note:** Tauri v2 sends command errors as strings (via the
+`Display` trait), not as serde-serialized objects. `formatFfmpegError` must
+handle both shapes — check `typeof err === "string"` first.
 
 ```tsx
 import { createSignal } from "solid-js"
-import { pickInputFile, pickOutputFile, trimVideo } from "./lib/ffmpeg"
 import type { FfmpegError } from "./lib/ffmpeg"
+import { pickInputFile, pickOutputFile, trimVideo } from "./lib/ffmpeg"
 import "./App.css"
 
 type Status =
@@ -528,12 +571,17 @@ type Status =
   | { kind: "ok"; message: string }
   | { kind: "error"; message: string }
 
-function formatFfmpegError(err: FfmpegError): string {
-  if ("ProcessFailed" in err)
-    return `ffmpeg exited ${err.ProcessFailed.code.toString()}:\n${err.ProcessFailed.stderr}`
-  if ("NotFound" in err) return "ffmpeg not found on PATH."
-  if ("Io" in err) return `IO error: ${err.Io}`
-  return "Unknown error"
+function formatFfmpegError(err: unknown): string {
+  // Tauri v2 may send errors as strings (via Display) or as serialized objects
+  if (typeof err === "string") return err
+  if (err !== null && typeof err === "object") {
+    const obj = err as FfmpegError
+    if ("ProcessFailed" in obj)
+      return `ffmpeg exited ${obj.ProcessFailed.code.toString()}:\n${obj.ProcessFailed.stderr}`
+    if ("NotFound" in obj) return "ffmpeg not found on PATH."
+    if ("Io" in obj) return `IO error: ${obj.Io}`
+  }
+  return String(err)
 }
 
 function App() {
@@ -541,97 +589,45 @@ function App() {
   const [outputPath, setOutputPath] = createSignal<string | null>(null)
   const [startSecs, setStartSecs] = createSignal(0)
   const [endSecs, setEndSecs] = createSignal(10)
+  const [overwrite, setOverwrite] = createSignal(false)
   const [status, setStatus] = createSignal<Status>({ kind: "idle" })
 
-  async function handlePickInput() {
-    const path = await pickInputFile()
-    if (path !== null) {
-      setInputPath(path)
-      const base = path.replace(/\.[^/.]+$/, "")
-      const ext = path.match(/\.[^/.]+$/)?.[0] ?? ".mp4"
-      setOutputPath(`${base}_trimmed${ext}`)
-    }
-  }
-
-  async function handlePickOutput() {
-    const current = outputPath()
-    const defaultName = current
-      ? (current.split("/").at(-1) ?? "output.mp4")
-      : "output.mp4"
-    const path = await pickOutputFile(defaultName)
-    if (path !== null) setOutputPath(path)
-  }
+  async function handlePickInput() { /* ... file picker + auto output path ... */ }
+  async function handlePickOutput() { /* ... save-as dialog ... */ }
 
   async function handleTrim() {
     const inp = inputPath()
     const out = outputPath()
-    if (!inp || !out) {
-      setStatus({ kind: "error", message: "Select input and output files first." })
-      return
-    }
-    if (endSecs() <= startSecs()) {
-      setStatus({ kind: "error", message: "End must be greater than start." })
-      return
-    }
+    if (!inp || !out) { /* validation */ return }
+    if (endSecs() <= startSecs()) { /* validation */ return }
     setStatus({ kind: "running" })
     try {
-      await trimVideo({ inputPath: inp, outputPath: out, startSecs: startSecs(), endSecs: endSecs() })
+      await trimVideo({
+        inputPath: inp,
+        outputPath: out,
+        startSecs: startSecs(),
+        endSecs: endSecs(),
+        overwrite: overwrite(),
+      })
       setStatus({ kind: "ok", message: `Trimmed → ${out}` })
     } catch (err: unknown) {
-      setStatus({ kind: "error", message: formatFfmpegError(err as FfmpegError) })
+      setStatus({ kind: "error", message: formatFfmpegError(err) })
     }
   }
 
   return (
     <main class="container">
       <h1>Simple Video Editor</h1>
-      <section style="display:flex;flex-direction:column;gap:12px;max-width:600px;margin:0 auto">
-        <div style="display:flex;gap:8px;align-items:center">
-          <button type="button" onClick={() => void handlePickInput()}>Open File</button>
-          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.875rem">
-            {inputPath() ?? "No file selected"}
-          </span>
-        </div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <button type="button" onClick={() => void handlePickOutput()}>Save As</button>
-          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.875rem">
-            {outputPath() ?? "No output path set"}
-          </span>
-        </div>
-        <div style="display:flex;gap:16px;align-items:center">
-          <label>
-            Start (s)
-            <input
-              type="number" min="0" step="0.1" value={startSecs()}
-              onInput={(e) => setStartSecs(parseFloat(e.currentTarget.value))}
-              style="width:80px;margin-left:8px"
-            />
-          </label>
-          <label>
-            End (s)
-            <input
-              type="number" min="0" step="0.1" value={endSecs()}
-              onInput={(e) => setEndSecs(parseFloat(e.currentTarget.value))}
-              style="width:80px;margin-left:8px"
-            />
-          </label>
-        </div>
-        <button type="button" disabled={status().kind === "running"} onClick={() => void handleTrim()}>
-          {status().kind === "running" ? "Trimming…" : "Trim"}
-        </button>
-        {status().kind !== "idle" && (
-          <p style={`white-space:pre-wrap;font-size:.875rem;color:${
-            status().kind === "error" ? "#c0392b"
-            : status().kind === "ok" ? "#27ae60"
-            : "#555"
-          }`}>
-            {status().kind === "running"
-              ? "Running…"
-              : "message" in status()
-                ? (status() as { kind: "ok" | "error"; message: string }).message
-                : ""}
-          </p>
-        )}
+      <section>
+        {/* Open File button + path display */}
+        {/* Save As button + path display */}
+        {/* Start/End time inputs */}
+        <label>
+          <input type="checkbox" checked={overwrite()} onChange={...} />
+          Allow overwrite existing file
+        </label>
+        {/* Trim button */}
+        {/* Status message (color-coded) */}
       </section>
     </main>
   )
@@ -690,13 +686,15 @@ Run `pnpm tauri dev` after all changes.
 In DevTools console:
 ```javascript
 window.__TAURI__.core.invoke("trim_video", {
-  input_path: "/nonexistent.mp4",
-  output_path: "/tmp/out.mp4",
-  start_secs: 0,
-  end_secs: 5,
+  inputPath: "/nonexistent.mp4",
+  outputPath: "/tmp/out.mp4",
+  startSecs: 0,
+  endSecs: 5,
+  overwrite: false,
 })
 ```
-Expected rejection: `{ "ProcessFailed": { "code": 1, "stderr": "No such file…" } }`
+Expected rejection: a string like `"ffmpeg process failed (exit 1): /nonexistent.mp4: No such file..."`.
+Note: Tauri v2 sends errors as Display strings, not serialized objects.
 
 ---
 
@@ -705,8 +703,11 @@ Expected rejection: `{ "ProcessFailed": { "code": 1, "stderr": "No such file…"
 | Symptom | Cause | Fix |
 |---|---|---|
 | IPC error / command not found | Command missing from `generate_handler![]` | Add to `lib.rs` |
+| `missing required key inputPath` | Using `snake_case` keys in JS `invoke()` | **Use `camelCase`** — Tauri v2 auto-converts Rust snake_case to camelCase |
+| `err is not an Object` in formatFfmpegError | Tauri v2 sends errors as strings (Display), not serialized objects | Check `typeof err === "string"` before using `in` operator |
 | Dialog opens, path is always `None` | `dialog:allow-open` missing | Add to capabilities |
 | ffmpeg spawn permission error | `shell:allow-execute` missing or scope wrong | Check capabilities + `tauri.conf.json` |
 | `app.shell()` method not found | `ShellExt` trait not imported | `use tauri_plugin_shell::ShellExt;` |
 | Rust compile error on `FfmpegError` | `std::io::Error` is not `Serialize` | Use manual `From` impl converting to `String` |
-| TypeScript invoke params silently ignored | camelCase vs snake_case mismatch | Use `snake_case` keys in all `invoke()` calls |
+| Event loop hangs after ffmpeg exits | Missing `break` in `Terminated` handler | Add `break` after capturing exit code |
+| ffmpeg silently overwrites output files | `-y` flag hardcoded in arg builders | Use `overwrite: bool` param; `run_ffmpeg` prepends `-y` or `-n` |
