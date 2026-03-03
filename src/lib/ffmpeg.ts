@@ -36,39 +36,39 @@ export type FfmpegError =
 
 export async function trimVideo(opts: TrimOptions): Promise<void> {
   return invoke("trim_video", {
-    input_path: opts.inputPath,
-    output_path: opts.outputPath,
-    start_secs: opts.startSecs,
-    end_secs: opts.endSecs,
+    inputPath: opts.inputPath,
+    outputPath: opts.outputPath,
+    startSecs: opts.startSecs,
+    endSecs: opts.endSecs,
   })
 }
 
 export async function extractFrame(opts: ExtractFrameOptions): Promise<void> {
   return invoke("extract_frame", {
-    input_path: opts.inputPath,
-    output_path: opts.outputPath,
-    at_secs: opts.atSecs,
+    inputPath: opts.inputPath,
+    outputPath: opts.outputPath,
+    atSecs: opts.atSecs,
   })
 }
 
 export async function remux(opts: RemuxOptions): Promise<void> {
   return invoke("remux", {
-    input_path: opts.inputPath,
-    output_path: opts.outputPath,
+    inputPath: opts.inputPath,
+    outputPath: opts.outputPath,
   })
 }
 
 export async function stripAudio(opts: StripAudioOptions): Promise<void> {
   return invoke("strip_audio", {
-    input_path: opts.inputPath,
-    output_path: opts.outputPath,
+    inputPath: opts.inputPath,
+    outputPath: opts.outputPath,
   })
 }
 
 export async function mergeClips(opts: MergeOptions): Promise<void> {
   return invoke("merge_clips", {
-    input_paths: opts.inputPaths,
-    output_path: opts.outputPath,
+    inputPaths: opts.inputPaths,
+    outputPath: opts.outputPath,
   })
 }
 
@@ -77,5 +77,5 @@ export async function pickInputFile(): Promise<string | null> {
 }
 
 export async function pickOutputFile(defaultName: string): Promise<string | null> {
-  return invoke<string | null>("pick_output_file", { default_name: defaultName })
+  return invoke<string | null>("pick_output_file", { defaultName })
 }
