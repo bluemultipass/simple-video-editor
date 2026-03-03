@@ -12,6 +12,9 @@ pub enum FfmpegError {
 
     #[error("io error: {0}")]
     Io(String),
+
+    #[error("{0}")]
+    UserError(String),
 }
 
 impl From<std::io::Error> for FfmpegError {
@@ -26,10 +29,9 @@ pub async fn run_ffmpeg(app: &tauri::AppHandle, args: Vec<String>, overwrite: bo
     if !overwrite {
         if let Some(output) = args.last() {
             if std::path::Path::new(output).exists() {
-                return Err(FfmpegError::ProcessFailed {
-                    code: 1,
-                    stderr: format!("Output file already exists: {output}\nCheck \"Allow overwrite\" to replace it."),
-                });
+                return Err(FfmpegError::UserError(
+                    format!("Output file already exists: {output}\nCheck \"Allow overwrite\" to replace it."),
+                ));
             }
         }
     }

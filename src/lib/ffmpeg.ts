@@ -38,6 +38,7 @@ export type FfmpegError =
   | { ProcessFailed: { code: number; stderr: string } }
   | { NotFound: null }
   | { Io: string }
+  | { UserError: string }
 
 export async function trimVideo(opts: TrimOptions): Promise<void> {
   return invoke("trim_video", {

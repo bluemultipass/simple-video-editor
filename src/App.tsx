@@ -10,12 +10,14 @@ type Status =
   | { kind: "error"; message: string }
 
 function formatFfmpegError(err: unknown): string {
-  // Tauri v2 may send errors as strings (via Display) or as serialized objects
   if (typeof err === "string") return err
   if (err !== null && typeof err === "object") {
     const obj = err as FfmpegError
-    if ("ProcessFailed" in obj)
-      return `ffmpeg exited ${obj.ProcessFailed.code.toString()}:\n${obj.ProcessFailed.stderr}`
+    if ("UserError" in obj) return obj.UserError
+    if ("ProcessFailed" in obj) {
+      console.error("ffmpeg stderr:", obj.ProcessFailed.stderr)
+      return `ffmpeg failed (exit code ${obj.ProcessFailed.code.toString()})`
+    }
     if ("NotFound" in obj) return "ffmpeg not found on PATH."
     if ("Io" in obj) return `IO error: ${obj.Io}`
   }
