@@ -27,6 +27,7 @@ function App() {
   const [outputPath, setOutputPath] = createSignal<string | null>(null)
   const [startSecs, setStartSecs] = createSignal(0)
   const [endSecs, setEndSecs] = createSignal(10)
+  const [overwrite, setOverwrite] = createSignal(false)
   const [status, setStatus] = createSignal<Status>({ kind: "idle" })
 
   async function handlePickInput() {
@@ -66,6 +67,7 @@ function App() {
         outputPath: out,
         startSecs: startSecs(),
         endSecs: endSecs(),
+        overwrite: overwrite(),
       })
       setStatus({ kind: "ok", message: `Trimmed → ${out}` })
     } catch (err: unknown) {
@@ -118,6 +120,14 @@ function App() {
             />
           </label>
         </div>
+        <label style="display:flex;align-items:center;gap:8px">
+          <input
+            type="checkbox"
+            checked={overwrite()}
+            onChange={(e) => setOverwrite(e.currentTarget.checked)}
+          />
+          Allow overwrite existing file
+        </label>
         <button
           type="button"
           disabled={status().kind === "running"}

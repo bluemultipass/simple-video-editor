@@ -20,14 +20,16 @@ impl From<std::io::Error> for FfmpegError {
     }
 }
 
-pub async fn run_ffmpeg(app: &tauri::AppHandle, args: Vec<String>) -> Result<(), FfmpegError> {
-    println!("[run_ffmpeg] spawning: ffmpeg {}", args.join(" "));
-    eprintln!("[run_ffmpeg] spawning: ffmpeg {}", args.join(" "));
+pub async fn run_ffmpeg(app: &tauri::AppHandle, args: Vec<String>, overwrite: bool) -> Result<(), FfmpegError> {
+    let mut full_args = vec![if overwrite { "-y" } else { "-n" }.into()];
+    full_args.extend(args);
+    println!("[run_ffmpeg] spawning: ffmpeg {}", full_args.join(" "));
+    eprintln!("[run_ffmpeg] spawning: ffmpeg {}", full_args.join(" "));
 
     let spawn_result = app
         .shell()
         .command("ffmpeg")
-        .args(args)
+        .args(full_args)
         .spawn();
 
     let (mut rx, _child) = match spawn_result {
@@ -86,7 +88,7 @@ pub async fn run_ffmpeg(app: &tauri::AppHandle, args: Vec<String>) -> Result<(),
 /// `-ss`/`-to` placed BEFORE `-i` for fast input-seeking (keyframe-accurate seek).
 pub fn trim_args(input: &str, output: &str, start_secs: f64, end_secs: f64) -> Vec<String> {
     vec![
-        "-y".into(),
+
         "-ss".into(),
         format!("{start_secs:.6}"),
         "-to".into(),
@@ -101,7 +103,7 @@ pub fn trim_args(input: &str, output: &str, start_secs: f64, end_secs: f64) -> V
 
 pub fn extract_frame_args(input: &str, output: &str, at_secs: f64) -> Vec<String> {
     vec![
-        "-y".into(),
+
         "-ss".into(),
         format!("{at_secs:.6}"),
         "-i".into(),
@@ -114,7 +116,7 @@ pub fn extract_frame_args(input: &str, output: &str, at_secs: f64) -> Vec<String
 
 pub fn remux_args(input: &str, output: &str) -> Vec<String> {
     vec![
-        "-y".into(),
+
         "-i".into(),
         input.to_owned(),
         "-c".into(),
@@ -126,7 +128,7 @@ pub fn remux_args(input: &str, output: &str) -> Vec<String> {
 /// Strips all audio tracks. `-an` removes audio; video stream is copied losslessly.
 pub fn strip_audio_args(input: &str, output: &str) -> Vec<String> {
     vec![
-        "-y".into(),
+
         "-i".into(),
         input.to_owned(),
         "-c:v".into(),
@@ -140,7 +142,7 @@ pub fn strip_audio_args(input: &str, output: &str) -> Vec<String> {
 /// `-safe 0` is required when paths are absolute.
 pub fn merge_args(list_file: &str, output: &str) -> Vec<String> {
     vec![
-        "-y".into(),
+
         "-f".into(),
         "concat".into(),
         "-safe".into(),
