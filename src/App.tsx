@@ -1,180 +1,117 @@
-import { createSignal } from "solid-js"
-import type { FfmpegError } from "./lib/ffmpeg"
-import { pickInputFile, pickOutputFile, trimVideo } from "./lib/ffmpeg"
+import { createMemo, createSignal, Show } from "solid-js"
+import { convertFileSrc } from "@tauri-apps/api/core"
+import { Tabs } from "@kobalte/core/tabs"
+import type { Operation, Status } from "./types"
+import { pickInputFile } from "./lib/ffmpeg"
+import VideoPreview from "./components/VideoPreview"
+import InputFilePicker from "./components/InputFilePicker"
+import StatusMessage from "./components/StatusMessage"
+import TrimPanel from "./components/TrimPanel"
+import ExtractFramePanel from "./components/ExtractFramePanel"
+import RemuxPanel from "./components/RemuxPanel"
+import StripAudioPanel from "./components/StripAudioPanel"
+import MergePanel from "./components/MergePanel"
 import "./App.css"
 
-type Status =
-  | { kind: "idle" }
-  | { kind: "running" }
-  | { kind: "ok"; message: string }
-  | { kind: "error"; message: string }
-
-function formatFfmpegError(err: unknown): string {
-  if (typeof err === "string") return err
-  if (err !== null && typeof err === "object") {
-    const obj = err as FfmpegError
-    if ("UserError" in obj) return obj.UserError
-    if ("ProcessFailed" in obj) {
-      console.error("ffmpeg stderr:", obj.ProcessFailed.stderr)
-      return `ffmpeg failed (exit code ${obj.ProcessFailed.code.toString()})`
-    }
-    if ("NotFound" in obj) return "ffmpeg not found on PATH."
-    if ("Io" in obj) return `IO error: ${obj.Io}`
-  }
-  return String(err)
-}
+const triggerClass =
+  "px-4 py-2 text-sm text-gray-600 hover:text-gray-900 data-[selected]:border-b-2 data-[selected]:border-blue-600 data-[selected]:font-semibold data-[selected]:text-blue-700"
 
 function App() {
   const [inputPath, setInputPath] = createSignal<string | null>(null)
-  const [outputPath, setOutputPath] = createSignal<string | null>(null)
-  const [startSecs, setStartSecs] = createSignal(0)
-  const [endSecs, setEndSecs] = createSignal(10)
+  const [previewPath, setPreviewPath] = createSignal<string | null>(null)
   const [overwrite, setOverwrite] = createSignal(false)
   const [status, setStatus] = createSignal<Status>({ kind: "idle" })
+  const [activeTab, setActiveTab] = createSignal<Operation>("trim")
+  const [videoDuration, setVideoDuration] = createSignal<number | null>(null)
+
+  const previewUrl = createMemo(() => {
+    const p = previewPath()
+    return p !== null ? convertFileSrc(p) : null
+  })
+
+  function handleTabChange(tab: string) {
+    setActiveTab(tab as Operation)
+    setStatus({ kind: "idle" })
+    if (tab !== "merge") setPreviewPath(inputPath())
+  }
 
   async function handlePickInput() {
     const path = await pickInputFile()
     if (path !== null) {
       setInputPath(path)
-      const base = path.replace(/\.[^/.]+$/, "")
-      const ext = path.match(/\.[^/.]+$/)?.[0] ?? ".mp4"
-      setOutputPath(`${base}_trimmed${ext}`)
-    }
-  }
-
-  async function handlePickOutput() {
-    const current = outputPath()
-    const defaultName = current ? (current.split("/").at(-1) ?? "output.mp4") : "output.mp4"
-    const path = await pickOutputFile(defaultName)
-    if (path !== null) setOutputPath(path)
-  }
-
-  async function handleTrim() {
-    const inp = inputPath()
-    const out = outputPath()
-    if (!inp || !out) {
-      setStatus({ kind: "error", message: "Select input and output files first." })
-      return
-    }
-    if (endSecs() <= startSecs()) {
-      setStatus({ kind: "error", message: "End must be greater than start." })
-      return
-    }
-    setStatus({ kind: "running" })
-    try {
-      await trimVideo({
-        inputPath: inp,
-        outputPath: out,
-        startSecs: startSecs(),
-        endSecs: endSecs(),
-        overwrite: overwrite(),
-      })
-      setStatus({ kind: "ok", message: `Trimmed → ${out}` })
-    } catch (err: unknown) {
-      setStatus({ kind: "error", message: formatFfmpegError(err) })
+      setPreviewPath(path)
+      setVideoDuration(null)
     }
   }
 
   return (
-    <main class="container">
-      <h1>Simple Video Editor</h1>
-      <section
-        style={{
-          display: "flex",
-          "flex-direction": "column",
-          gap: "12px",
-          "max-width": "600px",
-          margin: "0 auto",
-        }}
-      >
-        <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
-          <button type="button" onClick={() => void handlePickInput()}>
-            Open File
-          </button>
-          <span
-            style={{
-              flex: "1",
-              overflow: "hidden",
-              "text-overflow": "ellipsis",
-              "white-space": "nowrap",
-              "font-size": ".875rem",
-            }}
-          >
-            {inputPath() ?? "No file selected"}
-          </span>
-        </div>
-        <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
-          <button type="button" onClick={() => void handlePickOutput()}>
-            Save As
-          </button>
-          <span
-            style={{
-              flex: "1",
-              overflow: "hidden",
-              "text-overflow": "ellipsis",
-              "white-space": "nowrap",
-              "font-size": ".875rem",
-            }}
-          >
-            {outputPath() ?? "No output path set"}
-          </span>
-        </div>
-        <div style={{ display: "flex", gap: "16px", "align-items": "center" }}>
-          <label>
-            Start (s)
-            <input
-              type="number"
-              min="0"
-              step="0.1"
-              value={startSecs()}
-              onInput={(e) => setStartSecs(parseFloat(e.currentTarget.value))}
-              style={{ width: "80px", "margin-left": "8px" }}
-            />
-          </label>
-          <label>
-            End (s)
-            <input
-              type="number"
-              min="0"
-              step="0.1"
-              value={endSecs()}
-              onInput={(e) => setEndSecs(parseFloat(e.currentTarget.value))}
-              style={{ width: "80px", "margin-left": "8px" }}
-            />
-          </label>
-        </div>
-        <label style={{ display: "flex", "align-items": "center", gap: "8px" }}>
-          <input
-            type="checkbox"
-            checked={overwrite()}
-            onChange={(e) => setOverwrite(e.currentTarget.checked)}
+    <main class="mx-auto flex w-full max-w-2xl flex-col gap-4 p-6">
+      <h1 class="text-center text-2xl font-bold">Simple Video Editor</h1>
+      <VideoPreview url={previewUrl} onDuration={setVideoDuration} />
+      <Show when={activeTab() !== "merge"}>
+        <InputFilePicker path={inputPath} onPick={() => void handlePickInput()} />
+      </Show>
+      <Tabs value={activeTab()} onChange={handleTabChange}>
+        <Tabs.List class="flex border-b border-gray-200">
+          <Tabs.Trigger value="trim" class={triggerClass}>
+            Trim
+          </Tabs.Trigger>
+          <Tabs.Trigger value="extract" class={triggerClass}>
+            Extract Frame
+          </Tabs.Trigger>
+          <Tabs.Trigger value="remux" class={triggerClass}>
+            Remux
+          </Tabs.Trigger>
+          <Tabs.Trigger value="strip-audio" class={triggerClass}>
+            Strip Audio
+          </Tabs.Trigger>
+          <Tabs.Trigger value="merge" class={triggerClass}>
+            Merge
+          </Tabs.Trigger>
+        </Tabs.List>
+        <Tabs.Content value="trim">
+          <TrimPanel
+            inputPath={inputPath}
+            videoDuration={videoDuration}
+            overwrite={overwrite}
+            setOverwrite={setOverwrite}
+            setStatus={setStatus}
           />
-          Allow overwrite existing file
-        </label>
-        <button
-          type="button"
-          disabled={status().kind === "running"}
-          onClick={() => void handleTrim()}
-        >
-          {status().kind === "running" ? "Trimming…" : "Trim"}
-        </button>
-        {status().kind !== "idle" && (
-          <p
-            style={{
-              "white-space": "pre-wrap",
-              "font-size": ".875rem",
-              color:
-                status().kind === "error" ? "#c0392b" : status().kind === "ok" ? "#27ae60" : "#555",
-            }}
-          >
-            {status().kind === "running"
-              ? "Running…"
-              : "message" in status()
-                ? (status() as { kind: "ok" | "error"; message: string }).message
-                : ""}
-          </p>
-        )}
-      </section>
+        </Tabs.Content>
+        <Tabs.Content value="extract">
+          <ExtractFramePanel
+            inputPath={inputPath}
+            overwrite={overwrite}
+            setOverwrite={setOverwrite}
+            setStatus={setStatus}
+          />
+        </Tabs.Content>
+        <Tabs.Content value="remux">
+          <RemuxPanel
+            inputPath={inputPath}
+            overwrite={overwrite}
+            setOverwrite={setOverwrite}
+            setStatus={setStatus}
+          />
+        </Tabs.Content>
+        <Tabs.Content value="strip-audio">
+          <StripAudioPanel
+            inputPath={inputPath}
+            overwrite={overwrite}
+            setOverwrite={setOverwrite}
+            setStatus={setStatus}
+          />
+        </Tabs.Content>
+        <Tabs.Content value="merge">
+          <MergePanel
+            overwrite={overwrite}
+            setOverwrite={setOverwrite}
+            setStatus={setStatus}
+            onPreviewChange={setPreviewPath}
+          />
+        </Tabs.Content>
+      </Tabs>
+      <StatusMessage status={status} />
     </main>
   )
 }

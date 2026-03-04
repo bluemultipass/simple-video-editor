@@ -99,6 +99,23 @@ pub async fn pick_input_file(app: tauri::AppHandle) -> Result<Option<String>, St
 }
 
 #[tauri::command]
+pub async fn pick_input_files(app: tauri::AppHandle) -> Result<Vec<String>, String> {
+    let paths = app
+        .dialog()
+        .file()
+        .add_filter(
+            "Video files",
+            &["mp4", "mkv", "mov", "avi", "webm", "m4v", "ts", "mts"],
+        )
+        .blocking_pick_files();
+    Ok(paths
+        .unwrap_or_default()
+        .into_iter()
+        .map(|p| p.to_string())
+        .collect())
+}
+
+#[tauri::command]
 pub async fn pick_output_file(
     app: tauri::AppHandle,
     default_name: String,

@@ -15,6 +15,7 @@ pub fn run() {
             commands::strip_audio,
             commands::merge_clips,
             commands::pick_input_file,
+            commands::pick_input_files,
             commands::pick_output_file,
         ])
         .run(tauri::generate_context!())

@@ -90,3 +90,22 @@ export async function pickInputFile(): Promise<string | null> {
 export async function pickOutputFile(defaultName: string): Promise<string | null> {
   return invoke<string | null>("pick_output_file", { defaultName })
 }
+
+export async function pickInputFiles(): Promise<string[]> {
+  return invoke<string[]>("pick_input_files")
+}
+
+export function formatFfmpegError(err: unknown): string {
+  if (typeof err === "string") return err
+  if (err !== null && typeof err === "object") {
+    const obj = err as FfmpegError
+    if ("UserError" in obj) return obj.UserError
+    if ("ProcessFailed" in obj) {
+      console.error("ffmpeg stderr:", obj.ProcessFailed.stderr)
+      return `ffmpeg failed (exit code ${obj.ProcessFailed.code.toString()})`
+    }
+    if ("NotFound" in obj) return "ffmpeg not found on PATH."
+    if ("Io" in obj) return `IO error: ${obj.Io}`
+  }
+  return String(err)
+}
