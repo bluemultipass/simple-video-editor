@@ -321,8 +321,11 @@ When the user navigates away from the merge tab, `handleTabChange` restores
 - Calls `stripAudio()`
 
 ### MergePanel
-- File list: each entry shows the filename, with a [Remove] button
-- [Add Files] button — opens a **multi-select** file picker
+- File list: each entry shows the filename with a [Remove] button to delete
+  that single entry
+- [Add Files] button — opens a **multi-select** file picker; selected files
+  are **appended** to the existing list (not replacing it), so the user can
+  call it multiple times to build up the list incrementally
 - Output default: `{dir_of_first_file}/merged_output.mp4`, or
   `merged_output.mp4` if the list is empty
 - Calls `mergeClips()`
