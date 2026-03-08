@@ -1,6 +1,9 @@
+use std::sync::Mutex;
+
 use tauri_plugin_dialog::DialogExt;
 
 use crate::ffmpeg::{self, FfmpegError};
+use crate::file_server::FileServer;
 
 #[tauri::command]
 pub async fn trim_video(
@@ -113,6 +116,19 @@ pub async fn pick_input_files(app: tauri::AppHandle) -> Result<Vec<String>, Stri
         .into_iter()
         .map(|p| p.to_string())
         .collect())
+}
+
+/// Start (or restart) the local HTTP file server for video preview.
+/// Returns the `http://127.0.0.1:PORT/` URL to use as `<video src>`.
+#[tauri::command]
+pub fn start_file_server(
+    path: String,
+    state: tauri::State<'_, Mutex<Option<FileServer>>>,
+) -> Result<String, String> {
+    let server = FileServer::start(path)?;
+    let url = server.url();
+    *state.lock().map_err(|e| e.to_string())? = Some(server);
+    Ok(url)
 }
 
 #[tauri::command]

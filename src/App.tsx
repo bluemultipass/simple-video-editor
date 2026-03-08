@@ -1,5 +1,4 @@
-import { createMemo, createSignal, Show } from "solid-js"
-import { convertFileSrc } from "@tauri-apps/api/core"
+import { createSignal, Show } from "solid-js"
 import { Tabs } from "@kobalte/core/tabs"
 import type { Operation, Status } from "./types"
 import { pickInputFile } from "./lib/ffmpeg"
@@ -24,11 +23,6 @@ function App() {
   const [activeTab, setActiveTab] = createSignal<Operation>("trim")
   const [videoDuration, setVideoDuration] = createSignal<number | null>(null)
 
-  const previewUrl = createMemo(() => {
-    const p = previewPath()
-    return p !== null ? convertFileSrc(p) : null
-  })
-
   function handleTabChange(tab: string) {
     setActiveTab(tab as Operation)
     setStatus({ kind: "idle" })
@@ -47,7 +41,7 @@ function App() {
   return (
     <main class="mx-auto flex w-full max-w-2xl flex-col gap-4 p-6">
       <h1 class="text-center text-2xl font-bold">Simple Video Editor</h1>
-      <VideoPreview url={previewUrl} onDuration={setVideoDuration} />
+      <VideoPreview filePath={previewPath} onDuration={setVideoDuration} />
       <Show when={activeTab() !== "merge"}>
         <InputFilePicker path={inputPath} onPick={() => void handlePickInput()} />
       </Show>
